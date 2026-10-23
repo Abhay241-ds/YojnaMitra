@@ -68,7 +68,7 @@ const content = {
     saving: "Saving...",
     loading: "Loading your profile...",
     saved: "Profile saved successfully!",
-    loadError: "Unable to load your profile.",
+    loadError: "Unable to load your profile. Please Login first or try again.",
     saveError: "Unable to save your profile. Please try again.",
     loginRequired: "Please log in to save your profile.",
     required: "Please complete all required fields.",
@@ -297,15 +297,11 @@ export default function ProfilePage() {
           error: authError,
         } = await supabase.auth.getUser();
 
-        if (authError) {
-          throw authError;
-        }
+        if (!active) return;
 
-        if (!user) {
-          if (active) {
-            setError(t.loginRequired);
-            setLoading(false);
-          }
+        if (authError || !user) {
+          setError(t.loginRequired);
+          setLoading(false);
           return;
         }
 
