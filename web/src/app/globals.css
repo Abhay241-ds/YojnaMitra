@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-navy: #173b6c;
+  --color-brand-navy-dark: #0f2a4f;
+  --color-brand-bg: #f4f7fa;
+  --color-brand-gold: #c98a2c;
+}
+
+@theme inline {
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-navy);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Custom styling for styled borders and smooth focus rings */
+.field-amber-border {
+  border: 1.5px solid #E5A93C;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.field-amber-border:focus-within {
+  border-color: #D48806;
+  box-shadow: 0 0 0 3px rgba(229, 169, 60, 0.2);
+}
+
+/* Hide native appearance for styled select containers */
+select.clean-select {
+  background-image: none;
+  appearance: none;
+}
+
+/* Custom checkbox styling for navy sidebar */
+.filter-checkbox {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.filter-checkbox:checked {
+  background-color: #F97316;
+  border-color: #F97316;
+}
+
+.filter-checkbox:focus {
+  --tw-ring-color: #F97316;
+}
