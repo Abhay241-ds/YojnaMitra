@@ -36,7 +36,7 @@ export default function Home() {
 
           <div className="pt-2">
             <Link
-              href="/profile"
+              href="/schemes"
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-navy px-7 py-3 text-base font-medium text-white shadow-sm transition duration-200 hover:bg-brand-navy-dark hover:shadow"
             >
               <span>{content.getStarted}</span>
