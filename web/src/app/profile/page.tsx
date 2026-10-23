@@ -205,6 +205,10 @@ const states = [
   "Uttarakhand",
   "West Bengal",
   "Delhi",
+  "Andaman and Nicobar Islands",
+  "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
+  "Lakshadweep",
   "Jammu and Kashmir",
   "Ladakh",
   "Puducherry",
@@ -223,8 +227,62 @@ export default function ProfilePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const [districtsByState, setDistrictsByState] = useState<Record<string, string[]>>({});
+  const [districtsLoading, setDistrictsLoading] = useState(false);
 
   const t = content[language];
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadDistrictData() {
+      setDistrictsLoading(true);
+      try {
+        const response = await fetch(
+          "https://raw.githubusercontent.com/codingmation/indian-states-districts/main/data/india_states_districts.min.json",
+          { cache: "force-cache" }
+        );
+        if (!response.ok) throw new Error("Could not load district data");
+        const payload: unknown = await response.json();
+
+        const root = payload as any;
+        const stateRecords = Array.isArray(root)
+          ? root
+          : Array.isArray(root?.states)
+            ? root.states
+            : Array.isArray(root?.data)
+              ? root.data
+              : [];
+
+        const result: Record<string, string[]> = {};
+        for (const record of stateRecords) {
+          const stateName = record?.name ?? record?.state ?? record?.state_name;
+          const districtRecords =
+            record?.districts ?? record?.district ?? record?.district_list ?? [];
+          if (!stateName || !Array.isArray(districtRecords)) continue;
+          result[String(stateName)] = districtRecords
+            .map((district: any) =>
+              typeof district === "string"
+                ? district
+                : district?.name ?? district?.district ?? district?.district_name
+            )
+            .filter((name: unknown): name is string => typeof name === "string")
+            .sort((a: string, b: string) => a.localeCompare(b));
+        }
+
+        if (active) setDistrictsByState(result);
+      } catch (err) {
+        console.error("District list loading error:", err);
+      } finally {
+        if (active) setDistrictsLoading(false);
+      }
+    }
+
+    loadDistrictData();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -311,6 +369,7 @@ export default function ProfilePage() {
     setForm((previous) => ({
       ...previous,
       [name]: value,
+      ...(name === "state" ? { district: "" } : {}),
     }));
 
     setError("");
@@ -576,14 +635,37 @@ export default function ProfilePage() {
                 </Field>
 
                 <Field label={t.district} required>
-                  <input
+                  <select
                     name="district"
                     value={form.district}
                     onChange={handleChange}
-                    placeholder={t.districtPlaceholder}
                     required
+                    disabled={!form.state || districtsLoading}
                     className={inputClass}
-                  />
+                  >
+                    <option value="">
+                      {districtsLoading
+                        ? language === "hi"
+                          ? "जिलों की सूची लोड हो रही है..."
+                          : "Loading districts..."
+                        : !form.state
+                          ? language === "hi"
+                            ? "पहले राज्य चुनें"
+                            : "Select a state first"
+                          : language === "hi"
+                            ? "जिला चुनें"
+                            : "Select district"}
+                    </option>
+                    {(districtsByState[form.state] ?? []).map((district) => (
+                      <option key={district} value={district}>
+                        {district}
+                      </option>
+                    ))}
+                    {form.district &&
+                      !(districtsByState[form.state] ?? []).includes(form.district) && (
+                        <option value={form.district}>{form.district}</option>
+                      )}
+                  </select>
                 </Field>
               </div>
             </section>
