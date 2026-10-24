@@ -120,18 +120,30 @@ export default function SchemesPage() {
       setLoading(true);
       setLoadError("");
       try {
-        const { data: authData, error: authError } = await supabase.auth.getUser();
-        if (authError) throw authError;
+        // Login is optional for viewing schemes. Read the current session safely;
+        // when there is no session, continue loading public active schemes.
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.warn("Could not read auth session; loading public schemes without a profile.", sessionError);
+        }
 
+        const user = sessionData.session?.user ?? null;
         let profileData: ProfileRecord | null = null;
-        if (authData.user) {
+
+        // Load the user's profile only when a user is actually logged in.
+        if (user) {
           const { data, error } = await supabase
             .from("user_profiles")
             .select("full_name, age_range, gender, state, district, education_level, occupation, sub_occupation, annual_family_income")
-            .eq("user_id", authData.user.id)
+            .eq("user_id", user.id)
             .maybeSingle();
-          if (error) throw error;
-          profileData = data as ProfileRecord | null;
+
+          if (error) {
+            // A profile problem should not prevent public scheme cards from appearing.
+            console.warn("Could not load user profile; showing schemes without personalized eligibility.", error);
+          } else {
+            profileData = data as ProfileRecord | null;
+          }
         }
 
         const { data: schemeData, error: schemeError } = await supabase
