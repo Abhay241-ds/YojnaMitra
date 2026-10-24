@@ -55,7 +55,7 @@ export default function KeyFeatures() {
 
   return (
     <section
-      className="space-y-6 pb-8 pt-2"
+      className="space-y-6 pt-2"
       aria-labelledby="features-title"
     >
       <h2

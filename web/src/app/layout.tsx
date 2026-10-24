@@ -5,6 +5,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { LanguageProvider } from "@/lib/i18n";
+import { Suspense } from "react";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -24,7 +25,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className={jakarta.variable}>
       <body className="flex min-h-screen flex-col bg-brand-bg font-sans text-slate-800 antialiased">
         <LanguageProvider>
-          <Navbar />
+          <Suspense fallback={<div className="h-16" />}>
+            <Navbar />
+          </Suspense>
           {children}
           <Footer />
         </LanguageProvider>

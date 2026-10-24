@@ -5,6 +5,7 @@ import HeroIllustration from "@/components/HeroIllustration";
 import HowItWorks from "@/components/HowItWorks";
 import KeyFeatures from "@/components/KeyFeatures";
 import { useLang } from "@/lib/i18n";
+import FAQs from "@/components/FAQs";
 
 export default function Home() {
   const { lang } = useLang();
@@ -68,6 +69,7 @@ export default function Home() {
 
       <HowItWorks />
       <KeyFeatures />
+      <FAQs />
     </main>
   );
 }
