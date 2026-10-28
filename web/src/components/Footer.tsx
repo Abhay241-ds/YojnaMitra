@@ -9,9 +9,11 @@ const explore = [
   { label: "Support", href: "#" },
 ];
 
+// Always send visitors through the login page before they reach admin.
 const account = [
   { label: "Login / Register", href: "/auth" },
   { label: "My Profile", href: "/profile" },
+  { label: "Admin", href: "/auth?next=%2Fadmin%2F" },
 ];
 
 const linkClass =
@@ -25,13 +27,15 @@ async function getCurrentYear() {
 
 export default async function Footer() {
   const year = await getCurrentYear();
-  
 
   return (
     <footer className="bg-[#102A4C] text-slate-300">
       <div className="mx-auto grid max-w-7xl gap-10 px-6 py-12 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr] lg:px-12">
         <div className="space-y-4 sm:col-span-2 lg:col-span-1">
-          <Link href="/" className="inline-flex items-center gap-3 focus-visible:outline-white">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-3 focus-visible:outline-white"
+          >
             <LogoMark />
             <span className="text-2xl font-bold tracking-tight text-white">
               Yojna<span className="font-extrabold">Mitra</span>

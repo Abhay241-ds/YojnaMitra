@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import AuthIllustration from "./AuthIllustration";
 
 type Mode = "login" | "register";
 
-function friendlyError(message: string) {
+function friendlyError(message: string, language: string) {
   const m = message.toLowerCase();
-  if (m.includes("invalid login credentials")) return "Email or password is incorrect.";
-  if (m.includes("email not confirmed")) return "Please confirm your email first. Check your inbox for the link.";
-  if (m.includes("already registered")) return "This email is already registered. Please log in instead.";
-  if (m.includes("rate limit")) return "Too many attempts. Please wait a few minutes and try again.";
+  if (m.includes("invalid login credentials")) return language === "hi" ? "ईमेल या पासवर्ड गलत है।" : "Email or password is incorrect.";
+  if (m.includes("email not confirmed")) return language === "hi" ? "कृपया पहले ईमेल की पुष्टि करें। लिंक के लिए अपना इनबॉक्स देखें।" : "Please confirm your email first. Check your inbox for the link.";
+  if (m.includes("already registered")) return language === "hi" ? "यह ईमेल पहले से पंजीकृत है। कृपया लॉग इन करें।" : "This email is already registered. Please log in instead.";
+  if (m.includes("rate limit")) return language === "hi" ? "बहुत अधिक प्रयास हुए हैं। कुछ मिनट बाद फिर कोशिश करें।" : "Too many attempts. Please wait a few minutes and try again.";
   return message;
 }
 
@@ -105,10 +105,35 @@ function Field({ id, label, type = "text", value, onChange, placeholder, autoCom
 }
 
 /* ---------- Main view ---------- */
-export default function AuthView() {
+type AuthViewProps = {
+  next?: string;
+};
+
+export default function AuthView({ next }: AuthViewProps) {
   const router = useRouter();
 
   const [mode, setMode] = useState<Mode>("login");
+  const [language, setLanguage] = useState<"en" | "hi">("en");
+
+  // Follow the existing Navbar language toggle through the document's lang attribute.
+  useEffect(() => {
+    const syncLanguage = () => {
+      const current = document.documentElement.lang.toLowerCase();
+      setLanguage(current === "hi" || current.startsWith("hi-") ? "hi" : "en");
+    };
+
+    syncLanguage();
+
+    const observer = new MutationObserver(syncLanguage);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["lang"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const bilingual = (en: string, hi: string) => language === "hi" ? hi : en;
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -138,21 +163,56 @@ export default function AuthView() {
       });
 
       if (authError) {
-        setFormError(friendlyError(authError.message));
+        setFormError(friendlyError(authError.message, language));
         return;
       }
 
-      // Profile hai to schemes par, nahi to profile bharne ke liye
-      const { data: profile } = await supabase
+      // Admin links always require an explicit admin check after authentication.
+      // The page component only passes a validated local /admin destination.
+      const isAdminDestination = Boolean(
+        next && (next === "/admin" || next.startsWith("/admin/"))
+      );
+
+      if (isAdminDestination) {
+        const { data: admin, error: adminError } = await supabase
+          .from("app_admins")
+          .select("user_id")
+          .eq("user_id", data.user.id)
+          .maybeSingle();
+
+        if (adminError) {
+          setFormError(bilingual("We couldn’t verify administrator access. Please try again.", "एडमिन की अनुमति की पुष्टि नहीं हो सकी। कृपया फिर कोशिश करें।"));
+          return;
+        }
+
+        if (!admin) {
+          setFormError(
+            bilingual("This account does not have administrator access. Please use an authorized admin account.", "इस खाते को एडमिन की अनुमति नहीं है। कृपया अधिकृत एडमिन खाते से लॉग इन करें।")
+          );
+          return;
+        }
+
+        router.replace(next!);
+        router.refresh();
+        return;
+      }
+
+      // Regular user login: profile hai to schemes par, nahi to profile page.
+      const { data: profile, error: profileError } = await supabase
         .from("user_profiles")
         .select("id")
         .eq("user_id", data.user.id)
         .maybeSingle();
 
+      if (profileError) {
+        setFormError(bilingual("You are signed in, but we couldn’t load your profile. Please try again.", "आप लॉग इन हो गए हैं, लेकिन प्रोफ़ाइल लोड नहीं हो सकी। कृपया फिर कोशिश करें।"));
+        return;
+      }
+
       router.replace(profile ? "/schemes" : "/profile");
       router.refresh();
     } catch {
-      setFormError("Something went wrong. Please check your connection and try again.");
+      setFormError(bilingual("Something went wrong. Please check your connection and try again.", "कुछ गड़बड़ हुई। अपना इंटरनेट कनेक्शन जाँचें और फिर कोशिश करें।"));
     } finally {
       setLoading(false);
     }
@@ -164,11 +224,11 @@ export default function AuthView() {
     setNotice(null);
 
     if (password.length < 8) {
-      setFormError("Password must be at least 8 characters.");
+      setFormError(bilingual("Password must be at least 8 characters.", "पासवर्ड कम से कम 8 अक्षरों का होना चाहिए।"));
       return;
     }
     if (password !== confirm) {
-      setFormError("Passwords do not match.");
+      setFormError(bilingual("Passwords do not match.", "दोनों पासवर्ड मेल नहीं खाते।"));
       return;
     }
 
@@ -182,13 +242,13 @@ export default function AuthView() {
       });
 
       if (authError) {
-        setFormError(friendlyError(authError.message));
+        setFormError(friendlyError(authError.message, language));
         return;
       }
 
       // Email already registered (confirmation on hone par Supabase yahi deta hai)
       if (data.user?.identities && data.user.identities.length === 0) {
-        setFormError("This email is already registered. Please log in instead.");
+        setFormError(bilingual("This email is already registered. Please log in instead.", "यह ईमेल पहले से पंजीकृत है। कृपया लॉग इन करें।"));
         return;
       }
 
@@ -203,9 +263,9 @@ export default function AuthView() {
       setPassword("");
       setConfirm("");
       setMode("login");
-      setNotice("Account created. Open the confirmation link we emailed you, then log in.");
+      setNotice(bilingual("Account created. Open the confirmation link we emailed you, then log in.", "खाता बन गया है। ईमेल में आए पुष्टि लिंक को खोलें, फिर लॉग इन करें।"));
     } catch {
-      setFormError("Something went wrong. Please check your connection and try again.");
+      setFormError(bilingual("Something went wrong. Please check your connection and try again.", "कुछ गड़बड़ हुई। अपना इंटरनेट कनेक्शन जाँचें और फिर कोशिश करें।"));
     } finally {
       setLoading(false);
     }
@@ -215,7 +275,7 @@ export default function AuthView() {
     <button
       type="button"
       onClick={() => setShowPassword(!showPassword)}
-      aria-label={showPassword ? "Hide password" : "Show password"}
+      aria-label={showPassword ? bilingual("Hide password", "पासवर्ड छिपाएँ") : bilingual("Show password", "पासवर्ड दिखाएँ")}
       className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 transition-colors hover:text-slate-600"
     >
       <EyeIcon off={showPassword} />
@@ -228,10 +288,10 @@ export default function AuthView() {
       <section className="hidden flex-col justify-between border-r border-slate-100 bg-white px-14 py-12 lg:flex lg:w-1/2 xl:px-20">
         <div>
           <h2 className="text-4xl font-extrabold leading-snug tracking-tight text-brand-navy">
-            Welcome to YojnaMitra
+            {bilingual("Welcome to YojnaMitra", "YojnaMitra में आपका स्वागत है")}
           </h2>
           <p className="mt-2 text-lg text-slate-600">
-            Your gateway to government schemes and services
+            {bilingual("Your gateway to government schemes and services", "सरकारी योजनाओं और सेवाओं तक आपकी पहुँच")}
           </p>
         </div>
 
@@ -240,7 +300,7 @@ export default function AuthView() {
         </div>
 
         <p className="border-t border-slate-100 pt-5 text-xs text-slate-500">
-          YojnaMitra is an independent information guide, not a government website.
+          {bilingual("YojnaMitra is an independent information guide, not a government website.", "YojnaMitra एक स्वतंत्र सूचना मंच है, सरकारी वेबसाइट नहीं।")}
         </p>
       </section>
 
@@ -249,7 +309,7 @@ export default function AuthView() {
         <div className="w-full max-w-[440px] overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-lg">
           <div
             role="tablist"
-            aria-label="Log in or register"
+            aria-label={bilingual("Log in or register", "लॉग इन या रजिस्टर करें")}
             className="grid grid-cols-2 border-b border-slate-200"
           >
             {(["login", "register"] as const).map((m) => (
@@ -267,7 +327,7 @@ export default function AuthView() {
                     : "font-medium text-slate-500 hover:text-slate-700"
                 }`}
               >
-                {m === "login" ? "Log In" : "Register"}
+                {m === "login" ? bilingual("Log In", "लॉग इन") : bilingual("Register", "रजिस्टर")}
                 {mode === m && (
                   <span
                     aria-hidden="true"
@@ -280,12 +340,20 @@ export default function AuthView() {
 
           <div id="auth-panel" role="tabpanel" aria-labelledby={`tab-${mode}`} className="p-6 sm:p-8">
             <h1 className="text-2xl font-bold tracking-tight text-brand-navy">
-              {mode === "login" ? "Welcome back!" : "Create your account"}
+              {next?.startsWith("/admin")
+                ? mode === "login"
+                  ? bilingual("Administrator sign in", "एडमिन लॉग इन")
+                  : bilingual("Create your account", "अपना खाता बनाएँ")
+                : mode === "login"
+                  ? bilingual("Welcome back!", "स्वागत है!")
+                  : bilingual("Create your account", "अपना खाता बनाएँ")}
             </h1>
             <p className="mt-1 text-sm text-slate-600">
-              {mode === "login"
-                ? "Enter your details below"
-                : "Register to find schemes made for you"}
+              {next?.startsWith("/admin") && mode === "login"
+                ? bilingual("Sign in with an authorized administrator account to continue.", "आगे बढ़ने के लिए अधिकृत एडमिन खाते से लॉग इन करें।")
+                : mode === "login"
+                  ? bilingual("Enter your details below", "नीचे अपनी जानकारी भरें")
+                  : bilingual("Register to find schemes made for you", "अपने लिए उपयुक्त योजनाएँ खोजने के लिए रजिस्टर करें")}
             </p>
 
             <div className="mt-5 space-y-3 empty:hidden">
@@ -308,10 +376,10 @@ export default function AuthView() {
               {mode === "register" && (
                 <Field
                   id="full-name"
-                  label="Full name"
+                  label={bilingual("Full name", "पूरा नाम")}
                   value={fullName}
                   onChange={setFullName}
-                  placeholder="Full Name"
+                  placeholder={bilingual("Full Name", "पूरा नाम")}
                   autoComplete="name"
                   icon={<UserIcon />}
                 />
@@ -319,22 +387,22 @@ export default function AuthView() {
 
               <Field
                 id="email"
-                label="Email address"
+                label={bilingual("Email address", "ईमेल पता")}
                 type="email"
                 value={email}
                 onChange={setEmail}
-                placeholder="Email Address"
+                placeholder={bilingual("Email Address", "ईमेल पता")}
                 autoComplete="email"
                 icon={<MailIcon />}
               />
 
               <Field
                 id="password"
-                label="Password"
+                label={bilingual("Password", "पासवर्ड")}
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={setPassword}
-                placeholder="Password"
+                placeholder={bilingual("Password", "पासवर्ड")}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 icon={<LockIcon />}
                 trailing={passwordToggle}
@@ -343,11 +411,11 @@ export default function AuthView() {
               {mode === "register" && (
                 <Field
                   id="confirm-password"
-                  label="Confirm password"
+                  label={bilingual("Confirm password", "पासवर्ड की पुष्टि करें")}
                   type={showPassword ? "text" : "password"}
                   value={confirm}
                   onChange={setConfirm}
-                  placeholder="Confirm Password"
+                  placeholder={bilingual("Confirm Password", "पासवर्ड दोबारा लिखें")}
                   autoComplete="new-password"
                   icon={<LockIcon />}
                 />
@@ -358,19 +426,19 @@ export default function AuthView() {
                 disabled={loading}
                 className="w-full rounded-md border-b-2 border-amber-500 bg-brand-navy px-4 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-sm transition-colors hover:bg-brand-navy-dark disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Please wait..." : mode === "login" ? "Log In" : "Create Account"}
+                {loading ? bilingual("Please wait...", "कृपया प्रतीक्षा करें...") : mode === "login" ? bilingual("Log In", "लॉग इन") : bilingual("Create Account", "खाता बनाएँ")}
               </button>
             </form>
           </div>
 
           <div className="border-t border-slate-100 bg-slate-50/70 px-6 py-3.5 text-center text-sm font-medium text-slate-600">
-            {mode === "login" ? "Don't have an account?" : "Already have an account?"}
+            {mode === "login" ? bilingual("Don’t have an account?", "खाता नहीं है?") : bilingual("Already have an account?", "पहले से खाता है?")}
             <button
               type="button"
               onClick={() => switchMode(mode === "login" ? "register" : "login")}
               className="ml-1 font-bold text-amber-700 hover:underline"
             >
-              {mode === "login" ? "Register Now" : "Log In"}
+              {mode === "login" ? bilingual("Register Now", "अभी रजिस्टर करें") : bilingual("Log In", "लॉग इन")}
             </button>
           </div>
         </div>

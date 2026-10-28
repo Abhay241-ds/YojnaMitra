@@ -6,6 +6,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { LanguageProvider } from "@/lib/i18n";
 import { Suspense } from "react";
+import "@fortawesome/fontawesome-free/css/all.min.css";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],

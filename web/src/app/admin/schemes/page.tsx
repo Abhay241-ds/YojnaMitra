@@ -1,258 +1,168 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 type Scheme = {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  scheme_level: "central" | "state";
-  target_state: string;
-  eligible_occupation: string[];
-  min_age: number | null;
-  max_age: number | null;
-  annual_income_limit: number | null;
-  benefits: string | null;
-  required_documents: string[];
-  application_process: string | null;
+  id: string | number;
+  name: string | null;
+  description: string | null;
+  category: string | null;
+  scheme_level: "central" | "state" | string | null;
+  target_state: string | null;
   official_url: string | null;
-  is_active: boolean;
+  is_active: boolean | null;
+  created_at?: string | null;
 };
 
-type SchemeForm = {
-  name: string;
-  description: string;
-  category: string;
-  scheme_level: "central" | "state";
-  target_state: string;
-  eligible_occupation: string;
-  min_age: string;
-  max_age: string;
-  annual_income_limit: string;
-  benefits: string;
-  required_documents: string;
-  application_process: string;
-  official_url: string;
-  is_active: boolean;
-};
-
-const emptyForm: SchemeForm = {
-  name: "",
-  description: "",
-  category: "Other",
-  scheme_level: "central",
-  target_state: "All India",
-  eligible_occupation: "",
-  min_age: "",
-  max_age: "",
-  annual_income_limit: "",
-  benefits: "",
-  required_documents: "",
-  application_process: "",
-  official_url: "",
-  is_active: true,
-};
+type StatusFilter = "all" | "active" | "inactive";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
+const buttonClass =
+  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60";
 
 export default function AdminSchemesPage() {
   const router = useRouter();
   const [supabase] = useState(() => createClient());
-
   const [schemes, setSchemes] = useState<Scheme[]>([]);
-  const [form, setForm] = useState<SchemeForm>(emptyForm);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [levelFilter, setLevelFilter] = useState("all");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [authorized, setAuthorized] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | number | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const messageRef = useRef<HTMLDivElement | null>(null);
 
-  // After a save attempt, scroll to the error or success message.
-  useEffect(() => {
-    if (!error && !success) return;
-
-    messageRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  }, [error, success]);
-
-  const loadSchemes = useCallback(async () => {
-    const { data, error: queryError } = await supabase
-      .from("schemes")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (queryError) {
-      throw queryError;
-    }
-
-    setSchemes((data ?? []) as Scheme[]);
-  }, [supabase]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function initialize() {
-      try {
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
-
-        if (authError || !user) {
-          router.replace("/auth");
-          return;
-        }
-
-        const { data: admin, error: adminError } = await supabase
-          .from("app_admins")
-          .select("user_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (adminError) {
-          throw adminError;
-        }
-
-        if (!admin) {
-          router.replace("/");
-          return;
-        }
-
-        if (!active) return;
-
-        setAuthorized(true);
-        await loadSchemes();
-      } catch (err) {
-        console.error("Admin dashboard error:", err);
-
-        if (active) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Unable to load the admin dashboard."
-          );
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    initialize();
-
-    return () => {
-      active = false;
-    };
-  }, [supabase, router, loadSchemes]);
-
-  function updateField<K extends keyof SchemeForm>(
-    key: K,
-    value: SchemeForm[K]
-  ) {
-    setForm((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
-  }
-
-  function startEdit(scheme: Scheme) {
-    setEditingId(scheme.id);
-
-    setForm({
-      name: scheme.name ?? "",
-      description: scheme.description ?? "",
-      category: scheme.category ?? "Other",
-      scheme_level: scheme.scheme_level === "state" ? "state" : "central",
-      target_state: scheme.target_state ?? "All India",
-      eligible_occupation: (scheme.eligible_occupation ?? []).join(", "),
-      min_age: scheme.min_age == null ? "" : String(scheme.min_age),
-      max_age: scheme.max_age == null ? "" : String(scheme.max_age),
-      annual_income_limit:
-        scheme.annual_income_limit == null
-          ? ""
-          : String(scheme.annual_income_limit),
-      benefits: scheme.benefits ?? "",
-      required_documents: (scheme.required_documents ?? []).join(", "),
-      application_process: scheme.application_process ?? "",
-      official_url: scheme.official_url ?? "",
-      is_active: scheme.is_active,
-    });
-
+  const loadSchemes = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     setError("");
-    setSuccess("");
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setForm(emptyForm);
-    setError("");
-    setSuccess("");
-  }
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    setError("");
-    setSuccess("");
-
-    if (!form.name.trim() || !form.description.trim()) {
-      setError("Scheme name and description are required.");
-      return;
-    }
-
-    const minAge = form.min_age === "" ? null : Number(form.min_age);
-    const maxAge = form.max_age === "" ? null : Number(form.max_age);
-    const incomeLimit =
-      form.annual_income_limit === ""
-        ? null
-        : Number(form.annual_income_limit);
-
-    if (
-      (minAge !== null && (!Number.isInteger(minAge) || minAge < 0)) ||
-      (maxAge !== null && (!Number.isInteger(maxAge) || maxAge < 0)) ||
-      (minAge !== null && maxAge !== null && minAge > maxAge) ||
-      (incomeLimit !== null &&
-        (!Number.isFinite(incomeLimit) || incomeLimit < 0))
-    ) {
-      setError("Please enter valid age and income limits.");
-      return;
-    }
-
-    if (form.official_url.trim()) {
-      try {
-        const url = new URL(form.official_url.trim());
-
-        if (url.protocol !== "https:" && url.protocol !== "http:") {
-          throw new Error("Invalid protocol");
-        }
-      } catch {
-        setError("Please enter a valid official URL.");
-        return;
-      }
-    }
-
-    setSaving(true);
 
     try {
-      // Verify the current session and admin role before writing.
       const {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
 
       if (authError || !user) {
+        router.replace("/auth");
+        return;
+      }
+
+      const { data: admin, error: adminError } = await supabase
+        .from("app_admins")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (adminError) throw adminError;
+      if (!admin) {
+        router.replace("/");
+        return;
+      }
+
+      setAuthorized(true);
+
+      const { data, error: queryError } = await supabase
+        .from("schemes")
+        .select(
+          "id, name, description, category, scheme_level, target_state, official_url, is_active, created_at"
+        )
+        .order("created_at", { ascending: false });
+
+      if (queryError) throw queryError;
+      setSchemes((data ?? []) as Scheme[]);
+    } catch (err: unknown) {
+      console.error("Admin schemes load error:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Schemes could not be loaded. Please try again."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [router, supabase]);
+
+  useEffect(() => {
+    void loadSchemes();
+  }, [loadSchemes]);
+
+  const categories = useMemo(
+    () =>
+      [...new Set(schemes.map((scheme) => scheme.category?.trim()).filter(
+        (category): category is string => Boolean(category)
+      ))].sort((a, b) => a.localeCompare(b)),
+    [schemes]
+  );
+
+  const filteredSchemes = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return schemes.filter((scheme) => {
+      const searchable = [
+        scheme.name,
+        scheme.description,
+        scheme.category,
+        scheme.target_state,
+        scheme.scheme_level,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = !term || searchable.includes(term);
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" && scheme.is_active === true) ||
+        (statusFilter === "inactive" && scheme.is_active !== true);
+      const matchesCategory =
+        categoryFilter === "all" || scheme.category === categoryFilter;
+      const matchesLevel =
+        levelFilter === "all" || scheme.scheme_level === levelFilter;
+
+      return matchesSearch && matchesStatus && matchesCategory && matchesLevel;
+    });
+  }, [schemes, search, statusFilter, categoryFilter, levelFilter]);
+
+  const activeCount = schemes.filter((scheme) => scheme.is_active === true).length;
+  const inactiveCount = schemes.length - activeCount;
+  const withOfficialUrl = schemes.filter((scheme) => {
+    if (!scheme.official_url) return false;
+    try {
+      const url = new URL(scheme.official_url);
+      return url.protocol === "https:" || url.protocol === "http:";
+    } catch {
+      return false;
+    }
+  }).length;
+
+  async function deleteScheme(scheme: Scheme) {
+    const schemeName = scheme.name || "this scheme";
+    if (
+      !window.confirm(
+        `Delete "${schemeName}" permanently? This action cannot be undone.`
+      )
+    ) return;
+
+    setDeletingId(scheme.id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        router.replace("/auth");
         throw new Error("Your session has expired. Please log in again.");
       }
 
@@ -263,530 +173,262 @@ export default function AdminSchemesPage() {
         .maybeSingle();
 
       if (adminError) throw adminError;
+      if (!admin) throw new Error("You are not authorized to delete schemes.");
 
-      if (!admin) {
-        throw new Error("You are not authorized to manage schemes.");
-      }
-
-      const payload = {
-        name: form.name.trim(),
-        description: form.description.trim(),
-        category: form.category.trim() || "Other",
-        scheme_level: form.scheme_level,
-        target_state: form.target_state,
-        eligible_occupation: form.eligible_occupation
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        min_age: minAge,
-        max_age: maxAge,
-        annual_income_limit: incomeLimit,
-        benefits: form.benefits.trim() || null,
-        required_documents: form.required_documents
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        application_process: form.application_process.trim() || null,
-        official_url: form.official_url.trim() || null,
-        is_active: form.is_active,
-        updated_at: new Date().toISOString(),
-      };
-
-      if (editingId) {
-        const { error: updateError } = await supabase
-          .from("schemes")
-          .update(payload)
-          .eq("id", editingId);
-
-        if (updateError) throw updateError;
-
-        setSuccess("Scheme updated successfully.");
-      } else {
-        const { error: insertError } = await supabase
-          .from("schemes")
-          .insert(payload);
-
-        if (insertError) throw insertError;
-
-        setSuccess("Scheme added successfully.");
-      }
-
-      setForm(emptyForm);
-      setEditingId(null);
-
-      await loadSchemes();
-    } catch (err: unknown) {
-      console.error("Scheme save error details:", JSON.stringify(err, null, 2));
-
-      const message =
-        err && typeof err === "object" && "message" in err
-          ? String(err.message)
-          : "Unable to save the scheme. Check the browser console for details.";
-
-      setError(message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function deleteScheme(scheme: Scheme) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${scheme.name}"?`
-    );
-
-    if (!confirmed) return;
-
-    setError("");
-    setSuccess("");
-
-    try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        throw new Error("Please log in again.");
-      }
-
-      const { data: admin, error: adminError } = await supabase
-        .from("app_admins")
-        .select("user_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (adminError) throw adminError;
-
-      if (!admin) {
-        throw new Error("You are not authorized to delete schemes.");
-      }
-
-      const { error: deleteError } = await supabase
+      const { data: deletedRows, error: deleteError } = await supabase
         .from("schemes")
         .delete()
-        .eq("id", scheme.id);
+        .eq("id", scheme.id)
+        .select("id");
 
       if (deleteError) throw deleteError;
-
-      setSchemes((previous) =>
-        previous.filter((item) => item.id !== scheme.id)
-      );
-
-      if (editingId === scheme.id) {
-        cancelEdit();
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error(
+          "No scheme was deleted. Check the schemes table RLS DELETE policy and your admin permissions."
+        );
       }
 
-      setSuccess("Scheme deleted successfully.");
-    } catch (err) {
+      setSchemes((current) => current.filter((item) => item.id !== scheme.id));
+      setSuccess(`"${schemeName}" was deleted successfully.`);
+    } catch (err: unknown) {
       console.error("Scheme delete error:", err);
-
       setError(
-        err instanceof Error ? err.message : "Unable to delete the scheme."
+        err instanceof Error ? err.message : "Unable to delete this scheme."
       );
+    } finally {
+      setDeletingId(null);
     }
   }
-
-  const filteredSchemes = schemes.filter((scheme) =>
-    `${scheme.name} ${scheme.category} ${scheme.target_state}`
-      .toLowerCase()
-      .includes(search.toLowerCase())
-  );
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50">
-        <p className="text-sm font-medium text-slate-600">
-          Checking admin access...
-        </p>
+      <main className="flex min-h-[60vh] items-center justify-center bg-slate-50 p-6">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-700 border-t-transparent" />
+          <span className="text-sm font-medium text-slate-600">Checking admin access and loading schemes…</span>
+        </div>
       </main>
     );
   }
 
   if (!authorized) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <p className="text-sm text-red-600">
-          {error || "Redirecting..."}
+      <main className="flex min-h-[60vh] items-center justify-center p-6">
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error || "Redirecting…"}
         </p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-slate-50/80 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <header className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-amber-600">
-              YojnaMitra Admin
-            </p>
-
-            <h1 className="mt-2 text-3xl font-extrabold text-slate-900">
-              Scheme Management
-            </h1>
-
-            <p className="mt-2 text-sm text-slate-600">
-              Add, update and manage government schemes.
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
+              <span aria-hidden="true">▦</span> Scheme management
+            </div>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">All Schemes</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              Add, review, edit, and manage the government schemes available in YojnaMitra.
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => router.push("/")}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-          >
-            Back to Website
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void loadSchemes(true)}
+              disabled={refreshing}
+              className={`${buttonClass} border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-100`}
+            >
+              <span aria-hidden="true">{refreshing ? "↻" : "⟳"}</span>
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+            <Link
+              href="/admin/schemes/new"
+              className={`${buttonClass} bg-blue-700 text-white shadow-sm hover:bg-blue-800`}
+            >
+              <span aria-hidden="true">＋</span> Add New Scheme
+            </Link>
+          </div>
         </header>
 
         {error && (
-          <div
-            ref={messageRef}
-            role="alert"
-            className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-          >
-            {error}
+          <div role="alert" className="mb-5 flex items-start justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            <div><strong className="block font-bold">Something went wrong</strong><span className="mt-1 block">{error}</span></div>
+            <button type="button" onClick={() => setError("")} aria-label="Dismiss error" className="rounded-lg px-2 py-1 font-bold hover:bg-red-100">×</button>
           </div>
         )}
-
         {success && (
-          <div
-            ref={messageRef}
-            role="status"
-            className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700"
-          >
-            {success}
+          <div role="status" className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            <span>✓ {success}</span>
+            <button type="button" onClick={() => setSuccess("")} aria-label="Dismiss success message" className="rounded-lg px-2 py-1 font-bold hover:bg-emerald-100">×</button>
           </div>
         )}
 
-        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-bold text-slate-900">
-              {editingId ? "Edit Scheme" : "Add New Scheme"}
-            </h2>
-
-            {editingId && (
-              <button
-                type="button"
-                onClick={cancelEdit}
-                className="text-sm font-semibold text-slate-600 underline"
-              >
-                Cancel editing
-              </button>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Scheme Name *">
-                <input
-                  className={inputClass}
-                  value={form.name}
-                  onChange={(e) => updateField("name", e.target.value)}
-                  placeholder="e.g. PM Kisan Samman Nidhi"
-                  required
-                />
-              </Field>
-
-              <Field label="Category *">
-                <select
-                  className={inputClass}
-                  value={form.category}
-                  onChange={(e) => updateField("category", e.target.value)}
-                  required
-                >
-                  <option>Agriculture</option>
-                  <option>Education</option>
-                  <option>Health</option>
-                  <option>Employment</option>
-                  <option>Women & Child</option>
-                  <option>Housing</option>
-                  <option>Social Welfare</option>
-                  <option>Financial Assistance</option>
-                  <option>Other</option>
-                </select>
-              </Field>
-
-              <div className="md:col-span-2">
-                <Field label="Scheme Level *">
-                <select
-                  className={inputClass}
-                  value={form.scheme_level}
-                  onChange={(e) =>
-                    updateField("scheme_level", e.target.value as "central" | "state")
-                  }
-                  required
-                >
-                  <option value="central">Central Government</option>
-                  <option value="state">State Government</option>
-                </select>
-              </Field>
-
-              <Field label="Description *">
-                  <textarea
-                    className={inputClass}
-                    rows={3}
-                    value={form.description}
-                    onChange={(e) =>
-                      updateField("description", e.target.value)
-                    }
-                    required
-                  />
-                </Field>
-              </div>
-
-              <Field label="Target State">
-                <select
-                  className={inputClass}
-                  value={form.target_state}
-                  onChange={(e) =>
-                    updateField("target_state", e.target.value)
-                  }
-                >
-                  <option>All India</option>
-                  <option>Andhra Pradesh</option>
-                  <option>Bihar</option>
-                  <option>Delhi</option>
-                  <option>Gujarat</option>
-                  <option>Haryana</option>
-                  <option>Karnataka</option>
-                  <option>Madhya Pradesh</option>
-                  <option>Maharashtra</option>
-                  <option>Punjab</option>
-                  <option>Rajasthan</option>
-                  <option>Tamil Nadu</option>
-                  <option>Telangana</option>
-                  <option>Uttar Pradesh</option>
-                  <option>Uttarakhand</option>
-                  <option>West Bengal</option>
-                </select>
-              </Field>
-
-              <Field label="Eligible Occupations (comma separated)">
-                <input
-                  className={inputClass}
-                  value={form.eligible_occupation}
-                  onChange={(e) =>
-                    updateField("eligible_occupation", e.target.value)
-                  }
-                  placeholder="Farmer, Student"
-                />
-              </Field>
-
-              <Field label="Minimum Age">
-                <input
-                  className={inputClass}
-                  type="number"
-                  min="0"
-                  value={form.min_age}
-                  onChange={(e) => updateField("min_age", e.target.value)}
-                />
-              </Field>
-
-              <Field label="Maximum Age">
-                <input
-                  className={inputClass}
-                  type="number"
-                  min="0"
-                  value={form.max_age}
-                  onChange={(e) => updateField("max_age", e.target.value)}
-                />
-              </Field>
-
-              <Field label="Annual Income Limit (₹)">
-                <input
-                  className={inputClass}
-                  type="number"
-                  min="0"
-                  value={form.annual_income_limit}
-                  onChange={(e) =>
-                    updateField("annual_income_limit", e.target.value)
-                  }
-                />
-              </Field>
-
-              <Field label="Benefits">
-                <textarea
-                  className={inputClass}
-                  rows={3}
-                  value={form.benefits}
-                  onChange={(e) => updateField("benefits", e.target.value)}
-                />
-              </Field>
-
-              <Field label="Required Documents (comma separated)">
-                <textarea
-                  className={inputClass}
-                  rows={3}
-                  value={form.required_documents}
-                  onChange={(e) =>
-                    updateField("required_documents", e.target.value)
-                  }
-                  placeholder="Aadhaar Card, Bank Passbook"
-                />
-              </Field>
-
-              <div className="md:col-span-2">
-                <Field label="Application Process">
-                  <textarea
-                    className={inputClass}
-                    rows={4}
-                    value={form.application_process}
-                    onChange={(e) =>
-                      updateField("application_process", e.target.value)
-                    }
-                  />
-                </Field>
-              </div>
-
-              <div className="md:col-span-2">
-                <Field label="Official Government URL">
-                  <input
-                    className={inputClass}
-                    type="url"
-                    value={form.official_url}
-                    onChange={(e) =>
-                      updateField("official_url", e.target.value)
-                    }
-                    placeholder="https://..."
-                  />
-                </Field>
+        <section aria-label="Scheme statistics" className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "Total schemes", value: schemes.length, icon: "▤", detail: "All records in database" },
+            { label: "Active schemes", value: activeCount, icon: "✓", detail: "Currently marked active" },
+            { label: "Inactive schemes", value: inactiveCount, icon: "◷", detail: "Not shown as active" },
+            { label: "Official URLs", value: `${withOfficialUrl}/${schemes.length}`, icon: "↗", detail: "Syntactically valid links" },
+          ].map((stat) => (
+            <div key={stat.label} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/40">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+                  <p className="mt-2 text-3xl font-black tracking-tight text-slate-900">{stat.value}</p>
+                  <p className="mt-1 text-xs text-slate-400">{stat.detail}</p>
+                </div>
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg font-bold text-blue-700" aria-hidden="true">{stat.icon}</span>
               </div>
             </div>
-
-            <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
-              <input
-                type="checkbox"
-                checked={form.is_active}
-                onChange={(e) =>
-                  updateField("is_active", e.target.checked)
-                }
-                className="h-4 w-4 accent-blue-700"
-              />
-              Active — show this scheme on the public website
-            </label>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-[#173B6C] px-6 py-3 text-sm font-bold text-white hover:bg-[#102A4C] disabled:opacity-60"
-            >
-              {saving
-                ? "Saving..."
-                : editingId
-                  ? "Update Scheme"
-                  : "Add Scheme"}
-            </button>
-          </form>
+          ))}
         </section>
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 p-5">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">
-                All Schemes
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {schemes.length} total schemes
-              </p>
+          <div className="border-b border-slate-200 p-5 sm:p-6">
+            <div className="mb-5 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Scheme directory</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Showing <strong className="text-slate-700">{filteredSchemes.length}</strong> of {schemes.length} schemes
+                </p>
+              </div>
+              {(search || statusFilter !== "all" || categoryFilter !== "all" || levelFilter !== "all") && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(""); setStatusFilter("all"); setCategoryFilter("all"); setLevelFilter("all"); }}
+                  className="self-start text-sm font-semibold text-blue-700 hover:text-blue-900 sm:self-auto"
+                >
+                  Clear all filters
+                </button>
+              )}
             </div>
-
-            <input
-              className={`${inputClass} max-w-sm`}
-              placeholder="Search schemes..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search schemes"
-            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <label className="xl:col-span-1">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Search schemes</span>
+                <input className={inputClass} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, state, category…" />
+              </label>
+              <label>
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Status</span>
+                <select className={inputClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+                  <option value="all">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <label>
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Category</span>
+                <select className={inputClass} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                  <option value="all">All categories</option>
+                  {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Scheme level</span>
+                <select className={inputClass} value={levelFilter} onChange={(event) => setLevelFilter(event.target.value)}>
+                  <option value="all">Central & state</option>
+                  <option value="central">Central</option>
+                  <option value="state">State</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           {filteredSchemes.length === 0 ? (
-            <div className="p-10 text-center text-sm text-slate-500">
-              No schemes found. Add your first scheme using the form above.
+            <div className="px-6 py-16 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl text-slate-500" aria-hidden="true">⌕</div>
+              <h3 className="mt-4 font-bold text-slate-900">{schemes.length === 0 ? "No schemes added yet" : "No matching schemes"}</h3>
+              <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-slate-500">
+                {schemes.length === 0 ? "Add your first scheme to start building the YojnaMitra directory." : "Try changing your search term or clearing one or more filters."}
+              </p>
+              {schemes.length === 0 && (
+                <Link href="/admin/schemes/new" className={`${buttonClass} mt-5 bg-blue-700 text-white hover:bg-blue-800`}>＋ Add your first scheme</Link>
+              )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px] text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-5 py-4">Scheme</th>
-                    <th className="px-5 py-4">Category</th>
-                    <th className="px-5 py-4">State</th>
-                    <th className="px-5 py-4">Status</th>
-                    <th className="px-5 py-4">Actions</th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-slate-100">
-                  {filteredSchemes.map((scheme) => (
-                    <tr key={scheme.id} className="hover:bg-slate-50">
-                      <td className="max-w-sm px-5 py-4">
-                        <p className="font-bold text-slate-900">
-                          {scheme.name}
-                        </p>
-                        <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-                          {scheme.description}
-                        </p>
-                      </td>
-
-                      <td className="px-5 py-4">{scheme.category}</td>
-                      <td className="px-5 py-4">{scheme.target_state}</td>
-
-                      <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${scheme.is_active
-                            ? "bg-green-100 text-green-700"
-                            : "bg-slate-100 text-slate-600"
-                            }`}
-                        >
-                          {scheme.is_active ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex gap-3">
-                          <button
-                            type="button"
-                            onClick={() => startEdit(scheme)}
-                            className="font-semibold text-blue-700 hover:underline"
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => deleteScheme(scheme)}
-                            className="font-semibold text-red-600 hover:underline"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
+            <>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[850px] text-left text-sm">
+                  <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th scope="col" className="px-6 py-4 font-bold">Scheme</th>
+                      <th scope="col" className="px-4 py-4 font-bold">Category / level</th>
+                      <th scope="col" className="px-4 py-4 font-bold">Target state</th>
+                      <th scope="col" className="px-4 py-4 font-bold">Status</th>
+                      <th scope="col" className="px-6 py-4 text-right font-bold">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredSchemes.map((scheme) => (
+                      <tr key={scheme.id} className="transition hover:bg-slate-50/80">
+                        <td className="max-w-[360px] px-6 py-4">
+                          <p className="font-bold text-slate-900">{scheme.name || "Untitled scheme"}</p>
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{scheme.description || "No description provided."}</p>
+                          {scheme.official_url && (
+                            <a href={scheme.official_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline">
+                              Official link <span aria-hidden="true">↗</span>
+                            </a>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="block font-medium text-slate-700">{scheme.category || "Other"}</span>
+                          <span className="mt-1 block text-xs capitalize text-slate-400">{scheme.scheme_level || "Not set"}</span>
+                        </td>
+                        <td className="px-4 py-4 text-slate-600">{scheme.target_state || "Not specified"}</td>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${scheme.is_active === true ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${scheme.is_active === true ? "bg-emerald-500" : "bg-slate-400"}`} />
+                            {scheme.is_active === true ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <Link href={`/admin/schemes/${encodeURIComponent(String(scheme.id))}/edit`} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">Edit</Link>
+                            <button type="button" disabled={deletingId === scheme.id} onClick={() => void deleteScheme(scheme)} className="rounded-lg border border-red-100 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
+                              {deletingId === scheme.id ? "Deleting…" : "Delete"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid gap-3 p-4 md:hidden">
+                {filteredSchemes.map((scheme) => (
+                  <article key={scheme.id} className="rounded-2xl border border-slate-200 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="break-words font-bold text-slate-900">{scheme.name || "Untitled scheme"}</h3>
+                        <p className="mt-1 line-clamp-3 text-sm leading-5 text-slate-500">{scheme.description || "No description provided."}</p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${scheme.is_active === true ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{scheme.is_active === true ? "Active" : "Inactive"}</span>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-slate-600">{scheme.category || "Other"}</span>
+                      <span className="rounded-lg bg-blue-50 px-2.5 py-1.5 capitalize text-blue-700">{scheme.scheme_level || "Level not set"}</span>
+                      <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-slate-600">{scheme.target_state || "State not set"}</span>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                      {scheme.official_url ? <a href={scheme.official_url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 hover:underline">Official link ↗</a> : <span className="text-xs text-slate-400">No official URL</span>}
+                      <div className="flex gap-2">
+                        <Link href={`/admin/schemes/${encodeURIComponent(String(scheme.id))}/edit`} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700">Edit</Link>
+                        <button type="button" disabled={deletingId === scheme.id} onClick={() => void deleteScheme(scheme)} className="rounded-lg border border-red-100 px-3 py-2 text-xs font-bold text-red-600 disabled:opacity-50">{deletingId === scheme.id ? "Deleting…" : "Delete"}</button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
           )}
+          <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-3 text-xs text-slate-500">
+            Showing {filteredSchemes.length} record{filteredSchemes.length === 1 ? "" : "s"} · URL validity here is a format check only, not confirmation that a link is reachable or government-owned.
+          </div>
         </section>
       </div>
     </main>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-semibold text-slate-700">
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }

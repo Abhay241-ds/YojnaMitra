@@ -7,10 +7,12 @@ import LogoMark from "./LogoMark";
 import LanguageSwitch from "./LanguageSwitch";
 import { createClient } from "@/lib/supabase/client";
 
+type Language = "en" | "hi";
+
 const links = [
-  { label: "Home", href: "/" },
-  { label: "Profile", href: "/profile" },
-  { label: "Schemes", href: "/schemes" },
+  { label: { en: "Home", hi: "होम" }, href: "/" },
+  { label: { en: "Profile", hi: "प्रोफ़ाइल" }, href: "/profile" },
+  { label: { en: "Schemes", hi: "योजनाएँ" }, href: "/schemes" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -51,8 +53,28 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [language, setLanguage] = useState<Language>("en");
 
   const close = () => setOpen(false);
+  const t = (en: string, hi: string) => (language === "hi" ? hi : en);
+
+  useEffect(() => {
+    // Keep Navbar labels in sync with the existing LanguageSwitch component.
+    const readLanguage = () => {
+      const htmlLang = document.documentElement.lang.toLowerCase();
+      setLanguage(htmlLang === "hi" || htmlLang.startsWith("hi-") ? "hi" : "en");
+    };
+
+    readLanguage();
+
+    const observer = new MutationObserver(readLanguage);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["lang"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -96,6 +118,11 @@ export default function Navbar() {
     };
   }, []);
 
+  useEffect(() => {
+    // Close the mobile menu after route changes.
+    setOpen(false);
+  }, [pathname]);
+
   return (
     <header className="sticky top-0 z-50 bg-white shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
       <div
@@ -109,6 +136,7 @@ export default function Navbar() {
           href="/"
           onClick={close}
           className="flex items-center gap-2 md:gap-3"
+          aria-label="YojnaMitra home"
         >
           <LogoMark className="h-8 w-auto sm:h-10 md:h-12" />
 
@@ -116,29 +144,25 @@ export default function Navbar() {
             <span className="text-base font-bold leading-tight text-brand-navy sm:text-xl md:text-2xl">
               YojnaMitra
             </span>
-
             <span className="hidden text-sm font-medium text-slate-600 md:block">
-              Civic Scheme Discovery
+              {t("Civic Scheme Discovery", "सरकारी योजनाओं की खोज")}
             </span>
           </span>
         </Link>
 
         {/* Desktop navigation */}
-        <nav
-          aria-label="Main"
-          className="hidden items-center gap-1 p-1 xl:flex"
-        >
+        <nav aria-label={t("Main navigation", "मुख्य नेविगेशन")} className="hidden items-center gap-1 p-1 xl:flex">
           {links.map((link) => {
             const active = isActive(pathname, link.href);
 
             return (
               <Link
-                key={link.label}
+                key={link.href}
                 href={link.href}
                 aria-current={active ? "page" : undefined}
                 className={desktopLink(active)}
               >
-                {link.label}
+                {link.label[language]}
               </Link>
             );
           })}
@@ -148,22 +172,20 @@ export default function Navbar() {
         <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
           <LanguageSwitch />
 
-          {/* Login: only show when logged out */}
           {!authLoading && !isLoggedIn && (
             <Link
               href="/auth"
               className="hidden items-center justify-center whitespace-nowrap rounded-lg px-4 py-2.5 text-base font-medium text-brand-navy transition-colors hover:bg-brand-navy/5 md:inline-flex"
             >
-              Login
+              {t("Login", "लॉग इन")}
             </Link>
           )}
 
-          {/* Account icon: only show when logged in */}
           {!authLoading && isLoggedIn && (
             <Link
               href="/account"
-              aria-label="My account"
-              title="My account"
+              aria-label={t("My account", "मेरा अकाउंट")}
+              title={t("My account", "मेरा अकाउंट")}
               className="hidden size-10 shrink-0 items-center justify-center rounded-full bg-brand-navy text-white lg:flex"
             >
               <PersonIcon />
@@ -173,10 +195,10 @@ export default function Navbar() {
           {/* Mobile menu button */}
           <button
             type="button"
-            aria-label={open ? "Close menu" : "Open menu"}
+            aria-label={open ? t("Close menu", "मेन्यू बंद करें") : t("Open menu", "मेन्यू खोलें")}
             aria-expanded={open}
             aria-controls="mobile-menu"
-            onClick={() => setOpen(!open)}
+            onClick={() => setOpen((value) => !value)}
             className="rounded-lg p-2 text-brand-navy hover:bg-brand-navy/5 xl:hidden"
           >
             <svg
@@ -194,11 +216,7 @@ export default function Navbar() {
                   strokeLinejoin="round"
                 />
               ) : (
-                <path
-                  d="M4 7h16M4 12h16M4 17h16"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" strokeLinejoin="round" />
               )}
             </svg>
           </button>
@@ -209,7 +227,7 @@ export default function Navbar() {
       {open && (
         <nav
           id="mobile-menu"
-          aria-label="Mobile"
+          aria-label={t("Mobile navigation", "मोबाइल नेविगेशन")}
           className="border-t border-slate-200/70 bg-white px-4 pb-4 pt-2 sm:px-6 xl:hidden"
         >
           <ul className="space-y-1">
@@ -217,14 +235,14 @@ export default function Navbar() {
               const active = isActive(pathname, link.href);
 
               return (
-                <li key={link.label}>
+                <li key={link.href}>
                   <Link
                     href={link.href}
                     onClick={close}
                     aria-current={active ? "page" : undefined}
                     className={mobileLink(active)}
                   >
-                    {link.label}
+                    {link.label[language]}
                   </Link>
                 </li>
               );
@@ -232,34 +250,31 @@ export default function Navbar() {
           </ul>
 
           <div className="mt-3 flex flex-col gap-2 border-t border-slate-200/70 pt-3">
-            {/* Get Started */}
             <Link
               href="/schemes"
               onClick={close}
               className="rounded-lg bg-brand-navy px-4 py-3 text-center text-sm font-semibold text-white md:hidden"
             >
-              Get Started
+              {t("Get Started", "शुरू करें")}
             </Link>
 
-            {/* Login only when logged out */}
             {!authLoading && !isLoggedIn && (
               <Link
                 href="/auth"
                 onClick={close}
                 className="rounded-lg border border-brand-navy/30 px-4 py-3 text-center text-sm font-semibold text-brand-navy md:hidden"
               >
-                Login
+                {t("Login", "लॉग इन")}
               </Link>
             )}
 
-            {/* Account only when logged in */}
             {!authLoading && isLoggedIn && (
               <Link
                 href="/account"
                 onClick={close}
                 className="rounded-lg border border-brand-navy/30 px-4 py-3 text-center text-sm font-semibold text-brand-navy"
               >
-                My Account
+                {t("My Account", "मेरा अकाउंट")}
               </Link>
             )}
           </div>
@@ -268,4 +283,3 @@ export default function Navbar() {
     </header>
   );
 }
-
