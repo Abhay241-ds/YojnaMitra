@@ -6,7 +6,7 @@ const explore = [
   { label: "Home", href: "/" },
   { label: "Schemes", href: "/schemes" },
   { label: "Eligibility", href: "/profile" },
-  { label: "Support", href: "#" },
+  
 ];
 
 // Always send visitors through the login page before they reach admin.

@@ -12,6 +12,7 @@ interface ProfileForm {
   full_name: string;
   age_range: string;
   gender: string;
+  social_category: string;
   state: string;
   district: string;
   education_level: string;
@@ -24,6 +25,7 @@ const initialForm: ProfileForm = {
   full_name: "",
   age_range: "",
   gender: "",
+  social_category: "",
   state: "",
   district: "",
   education_level: "",
@@ -45,6 +47,8 @@ const content = {
     name: "Full Name",
     age: "Age Group",
     gender: "Gender",
+    socialCategory: "Social Category",
+    selectSocialCategory: "Select social category",
     state: "State",
     district: "District",
     education: "Education Level",
@@ -81,6 +85,12 @@ const content = {
     male: "Male",
     female: "Female",
     other: "Other",
+    generalCategory: "General",
+    scCategory: "SC (Scheduled Caste)",
+    stCategory: "ST (Scheduled Tribe)",
+    obcCategory: "OBC (Other Backward Classes)",
+    ewsCategory: "EWS (Economically Weaker Section)",
+    preferNotToSay: "Prefer not to say",
     student: "Student",
     farmer: "Farmer",
     selfEmployed: "Self-employed",
@@ -115,6 +125,8 @@ const content = {
     name: "पूरा नाम",
     age: "आयु वर्ग",
     gender: "लिंग",
+    socialCategory: "सामाजिक श्रेणी",
+    selectSocialCategory: "सामाजिक श्रेणी चुनें",
     state: "राज्य",
     district: "जिला",
     education: "शिक्षा का स्तर",
@@ -151,6 +163,12 @@ const content = {
     male: "पुरुष",
     female: "महिला",
     other: "अन्य",
+    generalCategory: "सामान्य",
+    scCategory: "SC (अनुसूचित जाति)",
+    stCategory: "ST (अनुसूचित जनजाति)",
+    obcCategory: "OBC (अन्य पिछड़ा वर्ग)",
+    ewsCategory: "EWS (आर्थिक रूप से कमजोर वर्ग)",
+    preferNotToSay: "बताना नहीं चाहते",
     student: "विद्यार्थी",
     farmer: "किसान",
     selfEmployed: "स्वरोज़गार",
@@ -322,6 +340,7 @@ export default function ProfilePage() {
             full_name: data.full_name ?? "",
             age_range: data.age_range ?? "",
             gender: data.gender ?? "",
+            social_category: data.social_category ?? "",
             state: data.state ?? "",
             district: data.district ?? "",
             education_level: data.education_level ?? "",
@@ -429,6 +448,7 @@ export default function ProfilePage() {
         full_name: form.full_name.trim(),
         age_range: form.age_range,
         gender: form.gender,
+        social_category: form.social_category || null,
         state: form.state,
         district: form.district.trim(),
         education_level: form.education_level,
@@ -592,6 +612,23 @@ export default function ProfilePage() {
                     <option value="Male">{t.male}</option>
                     <option value="Female">{t.female}</option>
                     <option value="Other">{t.other}</option>
+                  </select>
+                </Field>
+
+                <Field label={t.socialCategory} optional={t.optional}>
+                  <select
+                    name="social_category"
+                    value={form.social_category}
+                    onChange={handleChange}
+                    className={inputClass}
+                  >
+                    <option value="">{t.selectSocialCategory}</option>
+                    <option value="General">{t.generalCategory}</option>
+                    <option value="SC">{t.scCategory}</option>
+                    <option value="ST">{t.stCategory}</option>
+                    <option value="OBC">{t.obcCategory}</option>
+                    <option value="EWS">{t.ewsCategory}</option>
+                    <option value="Prefer not to say">{t.preferNotToSay}</option>
                   </select>
                 </Field>
               </div>

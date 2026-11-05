@@ -24,3 +24,16 @@ build/
 .idea/
 .DS_Store
 Thumbs.db
+# Large generated scheme data
+data_pipeline/data
+data_pipeline/data/schemes_bilingual_detailed_cleaned.json
+data_pipeline/data/schemes_detailed_checkpoint.json
+data_pipeline/data/schemes_detailed_combined_All_schemes.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated scheme data
+data_pipeline/data/*.json

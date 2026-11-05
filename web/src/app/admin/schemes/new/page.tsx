@@ -14,6 +14,7 @@ type SchemeForm = {
   scheme_level: "central" | "state";
   target_state: string;
   eligible_occupation: string;
+  eligible_social_categories: string[];
   min_age: string;
   max_age: string;
   annual_income_limit: string;
@@ -35,6 +36,7 @@ const emptyForm: SchemeForm = {
   scheme_level: "central",
   target_state: "All India",
   eligible_occupation: "",
+  eligible_social_categories: ["ALL"],
   min_age: "",
   max_age: "",
   annual_income_limit: "",
@@ -62,6 +64,16 @@ const categories = [
   "Social Welfare",
   "Financial Assistance",
   "Other",
+];
+
+const socialCategories = [
+  { value: "ALL", label: "All categories" },
+  { value: "General", label: "General" },
+  { value: "SC", label: "SC — Scheduled Caste" },
+  { value: "ST", label: "ST — Scheduled Tribe" },
+  { value: "OBC", label: "OBC — Other Backward Classes" },
+  { value: "EWS", label: "EWS — Economically Weaker Section" },
+  { value: "Other", label: "Other" },
 ];
 
 const states = [
@@ -163,6 +175,26 @@ export default function AddSchemePage() {
     setForm((previous) => ({ ...previous, [key]: value }));
   }
 
+  function toggleSocialCategory(category: string) {
+    setForm((previous) => {
+      const selected = previous.eligible_social_categories;
+
+      if (category === "ALL") {
+        return { ...previous, eligible_social_categories: ["ALL"] };
+      }
+
+      const withoutAll = selected.filter((item) => item !== "ALL");
+      const next = withoutAll.includes(category)
+        ? withoutAll.filter((item) => item !== category)
+        : [...withoutAll, category];
+
+      return {
+        ...previous,
+        eligible_social_categories: next.length ? next : ["ALL"],
+      };
+    });
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -245,6 +277,7 @@ export default function AddSchemePage() {
           .split(",")
           .map((value) => value.trim())
           .filter(Boolean),
+        eligible_social_categories: form.eligible_social_categories,
         min_age: minAge,
         max_age: maxAge,
         annual_income_limit: incomeLimit,
@@ -395,6 +428,36 @@ export default function AddSchemePage() {
               <Field label="Eligible occupations" hint="Separate multiple values with commas.">
                 <input className={inputClass} value={form.eligible_occupation} onChange={(e) => updateField("eligible_occupation", e.target.value)} placeholder="Farmer, Student, Unemployed" />
               </Field>
+              <div className="md:col-span-2">
+                <Field
+                  label="Eligible social categories"
+                  hint="Select the categories allowed by the scheme's official guidelines. Choose All categories if the scheme has no category restriction."
+                >
+                  <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {socialCategories.map((category) => {
+                      const checked = form.eligible_social_categories.includes(category.value);
+                      return (
+                        <label
+                          key={category.value}
+                          className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 text-sm transition ${
+                            checked
+                              ? "border-blue-300 bg-blue-50 text-blue-900"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleSocialCategory(category.value)}
+                            className="h-4 w-4 accent-blue-700"
+                          />
+                          <span className="font-medium">{category.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </Field>
+              </div>
               <Field label="Minimum age (years)">
                 <input className={inputClass} type="number" inputMode="numeric" min="0" max="120" step="1" value={form.min_age} onChange={(e) => updateField("min_age", e.target.value)} placeholder="e.g. 18" />
               </Field>
